@@ -41,7 +41,8 @@ router.get('/', async (request, response) => {
 
 /* New Book Route */
 router.get('/new', async (request, response) => {
-    renderNewPage(response, new Book());
+    // renderNewPage(response, new Book());
+    renderFormPage(response, 'new', new Book());
 });
 
 /* Create Book Route */
@@ -59,12 +60,79 @@ router.post('/', upload.single('cover'), async (request, response) => {
 
     try {
         const newBook = await book.save();
-        response.redirect('books');
+        response.redirect(`books/${newBook.id}`);
     } catch{
         if (book.coverImageName != null) {
             removeBookCover(book.coverImageName);
         }
         renderNewPage(response, book, true);
+    }
+});
+
+// Show Book route
+router.get('/:id', async (req, res) => {
+    try {
+        const book = await Book.findById(req.params.id).populate('author').exec();
+        res.render('books/show', {
+            book: book
+        });
+    } catch {
+        res.redirect('/');
+    }
+});
+
+// Edit Book Route
+router.get('/:id/edit', async (req, res) => {
+    try {
+        const book = await Book.findById(req.params.id);
+        renderFormPage(res, 'edit', book);
+    } catch{
+        res.redirect('/');
+    }
+});
+
+// Update Book Route
+router.put('/:id', async (req, res) => {
+    let book;
+
+    try {
+        book = await Book.findById(req.params.id);
+        book.title = req.body.title;
+        book.author = req.body.author;
+        book.publishDate = new Date(req.body.publishDate);
+        book.pageCount = req.body.pageCount;
+        book.description = req.body.description;
+        if (req.body.cover != null && req.body.cover !== '') {
+            saveCover(book, req.body.cover);
+        }
+        await book.save();
+        res.redirect(`books/${book.id}`);
+    } catch{
+        if (book != null) {
+            removeBookCover(book.coverImageName);
+            renderFormPage(res, 'edit', book, true);
+        } else {
+            res.redirect('/');
+        }
+    }
+});
+
+// Delete Book Route
+router.delete('/:id', async (req, res) => {
+    let book;
+    try {
+        book = await Book.findById(req.params.id);
+        await book.remove();
+        res.redirect('/');
+    } catch {
+        if (book != null) {
+            res.render('books/show', {
+                book: book,
+                errorMessage: 'Could not delete book'
+            });
+        } else {
+            res.redirect('/');
+        }
     }
 });
 
@@ -82,7 +150,28 @@ const renderNewPage = async (response, book, hasError = false) => {
             book: book
         };
         if (hasError) params.errorMessage = 'Error Creating Book';
-        response.render('books/new', params);
+        response.render('books/edit', params);
+    } catch{
+        response.redirect('/books');
+    }
+};
+
+const renderFormPage = async (response, form, book, hasError = false) => {
+    try {
+        const authors = await Author.find({});
+        const params = {
+            authors: authors,
+            book: book
+        };
+        if (hasError) {
+            if (form === 'edit') {
+                params.errorMessage = 'Error Updating Book';
+            } else {
+                params.errorMessage = 'Error Creating Book';
+            }
+        }
+        // if (hasError) params.errorMessage = 'Error Creating Book';
+        response.render(`books/${form}`, params);
     } catch{
         response.redirect('/books');
     }
